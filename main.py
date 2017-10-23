@@ -20,7 +20,22 @@ class SongPlayer:
 	# Add a song to the song list
 	def addSong(self, songName):
 		self.songList.append(songName)
+		print("SONGS:")
 		print(self.songList)
+
+	# Skip the current song
+	def skipSong(self):
+		# There is no currentPlayer
+		if self.currentPlayer == None:
+			return
+
+		# There is no song playing
+		if not self.currentPlayer.is_playing():
+			pass
+
+		# Skip the current song
+		self.currentPlayer.stop()
+		self.playNextSong()
 
 	# Update the voice channel that the bot is in
 	async def updateChannel(self, channelName, message):
@@ -108,6 +123,37 @@ class Youtube:
 	def __init__(self):
 		pass
 
+	# Filter to find the target video from the HTMl
+	def filterResults(self, html_content):
+		# Find the video ID
+		search_results = re.findall(r'href=\"\/watch\?v=(.{11})', html_content)
+
+		# Filter for the video
+		alreadySearched = set()
+		maxSearches = 6
+		count = 0
+		for url in search_results:
+			# Already searched this video
+			if url in alreadySearched:
+				continue
+
+			count += 1
+			if count > maxSearches:
+				break
+
+			alreadySearched.add(url)
+			video = pafy.new(url)	
+
+			# ----------- FILTERS ------------
+			# Video in the music category
+			if video.category != "Music":
+				continue
+
+			return url
+
+		# Didn't find any - return ""
+		return ""
+
 	# Return the video url from the video name
 	def searchForVideo(self, videoName):
 		# Get the HTML content from youtube
@@ -115,12 +161,13 @@ class Youtube:
 		html_object = urllib.request.urlopen("http://www.youtube.com/results?" + query_string)
 		html_content = html_object.read().decode()
 
-		# Find the video ID
-		search_results = re.findall(r'href=\"\/watch\?v=(.{11})', html_content)
+		# Filter for the desired results
+		returnUrl = self.filterResults(html_content)
+
 		# There are no results
-		if len(search_results) == 0:
+		if returnUrl == "":
+			print("There were no Youtube results")
 			return ""
-		returnUrl = "http://www.youtube.com/watch?v=" + search_results[0]
 
 		# Return the URL for the video
 		return returnUrl
@@ -195,8 +242,13 @@ async def on_message(message):
 		# Try to play the song (works if no song is playing)
 		songPlayer.playNextSong()
 
+	# Print help message
 	elif command == "!help":
 		pass
+
+	# Skip the current song
+	elif command == "!skip":
+		songPlayer.skipSong()	
 
 # Load configuration file and decode JSON to a dictionary
 def loadConfiguration(configurationFilePath):
@@ -207,8 +259,8 @@ def loadConfiguration(configurationFilePath):
 
 def loadKey(client_key_path):
 	with open(client_key_path, 'r') as f:
-		key = f.readline()
-		return key
+		key = f.read().split('\n')
+		return key[0]
 
 # Main function
 if __name__ == "__main__":
@@ -217,8 +269,6 @@ if __name__ == "__main__":
 	client_key_path = "./client.key"
 	client_key = loadKey(client_key_path)
 	client_key.strip()
-
-	print(client_key)
 
 	# Load OPUS library for voice
 	opusLib = "libopus-0"
