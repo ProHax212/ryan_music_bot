@@ -244,11 +244,25 @@ async def on_message(message):
 
 	# Print help message
 	elif command == "!help":
-		pass
+		help_message = """
+		Commands:
+		!play [SONG NAME] - Play the song (searches YouTube).  Adds the song to a queue if a song is already playing
+		!skip - Skips the current song and starts playing the next.
+		!join [CHANNEL NAME] - Move the bot to the voice channel (case sensitive)
+		!help - Gives a list of commands
+		"""
+		await client.send_message(message.channel, help_message)
 
 	# Skip the current song
 	elif command == "!skip":
 		songPlayer.skipSong()	
+
+	elif command.startswith("!"):
+		help_message = """
+		Type !help for a list of commands
+		"""
+		await client.send_message(message.channel, help_message)
+		
 
 # Load configuration file and decode JSON to a dictionary
 def loadConfiguration(configurationFilePath):
