@@ -16,7 +16,16 @@ class SongPlayer:
 		self.songList = []
 		self.voiceClient = None
 		self.currentPlayer = None
+		self.volume = 1.0
 	
+	# Update the volume of the voice player
+	def updateVolume(self, volume):
+		self.volume = volume	
+
+		# Update the current player if it's there
+		if self.currentPlayer != None:
+			self.currentPlayer.volume = volume
+
 	# Add a song to the song list
 	def addSong(self, songName):
 		self.songList.append(songName)
@@ -69,6 +78,15 @@ class SongPlayer:
 
 		return True
 
+	# Check if a song is currently playing
+	def isSongPlaying(self):
+		# Is there a player
+		if self.currentPlayer == None:
+			return false
+
+		# Is the player playing a song
+			return self.currentPlayer.is_playing()
+
 	# Remove a song off the top of the list
 	def popSong(self):
 		#List is empty
@@ -115,6 +133,10 @@ class SongPlayer:
 
 		# Play the song
 		self.currentPlayer = self.voiceClient.create_ffmpeg_player(songFilePath, after=songFinished)
+		
+		# Set the volume
+		self.currentPlayer.volume = self.volume
+
 		self.currentPlayer.start()
 
 
@@ -192,6 +214,11 @@ async def on_ready():
 	print(client.user.id)
 	print('----------')
 
+# Error handler for the discord client
+@client.event
+async def on_error(event, args):
+	print("Event that caused error: " + event)
+
 @client.event
 async def on_message(message):
 
@@ -249,6 +276,8 @@ async def on_message(message):
 		!play [SONG NAME] - Play the song (searches YouTube).  Adds the song to a queue if a song is already playing
 		!skip - Skips the current song and starts playing the next.
 		!join [CHANNEL NAME] - Move the bot to the voice channel (case sensitive)
+		!volume [volume] - Set the music volume (Number between 0.0 - 2.0)
+		!volume - Show the current music volume
 		!help - Gives a list of commands
 		"""
 		await client.send_message(message.channel, help_message)
@@ -256,6 +285,34 @@ async def on_message(message):
 	# Skip the current song
 	elif command == "!skip":
 		songPlayer.skipSong()	
+
+	# Set the volume for the bot
+	elif command == "!volume":
+		volume = content.partition(' ')[2]
+
+		# No volume found - report the volume
+		if volume == "":
+			botMessage = "Current Volume: " + str(songPlayer.volume)
+			await client.send_message(message.channel, botMessage)
+			return
+
+		# Bad volume syntax
+		volumeFloat = 0.0	
+		try:
+			volumeFloat = float(volume)
+		except ValueError:
+			botMessage = "Volume must be a number between 0.0 - 2.0"
+			await client.send_message(message.channel, botMessage)
+			return
+
+		# Number out of range
+		if not (0.0 <= volumeFloat <= 2.0):
+			botMessage = "Volume must be a number between 0.0 - 2.0"
+			await client.send_message(message.channel, botMessage)
+			return
+
+		# Update the volume
+		songPlayer.updateVolume(volumeFloat)
 
 	elif command.startswith("!"):
 		help_message = """
