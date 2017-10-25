@@ -8,6 +8,9 @@ import urllib.parse
 import re
 import json
 import os.path
+import sys
+import logging
+from logging.handlers import RotatingFileHandler
 
 
 # Queue of songs to play
@@ -216,8 +219,8 @@ async def on_ready():
 
 # Error handler for the discord client
 @client.event
-async def on_error(event, args):
-	print("Event that caused error: " + event)
+async def on_error(event, *args, **kwargs):
+	logging.error(str(sys.exc_info()))
 
 @client.event
 async def on_message(message):
@@ -333,15 +336,52 @@ def loadKey(client_key_path):
 		key = f.read().split('\n')
 		return key[0]
 
+# Initialize logging
+def loggingSetup(fileName):
+	logPath = "./"
+	logFile = logPath + fileName
+	maxFileSizeBytes = 5*1024*1024
+
+	logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+	rootLogger = logging.getLogger()
+
+	# Log to file
+	rotatingFileHandler = RotatingFileHandler(logFile, mode='a', maxBytes=maxFileSizeBytes, backupCount=2, encoding=None, delay=0)
+	rotatingFileHandler.setFormatter(logFormatter)
+	rootLogger.addHandler(rotatingFileHandler)
+
+#	fileHandler = logging.FileHandler("{0}/{1}.log".format(logPath, fileName))
+#	fileHandler.setFormatter(logFormatter)
+#	rootLogger.addHandler(fileHandler)
+
+	# Log to console
+	consoleHandler = logging.StreamHandler()
+	consoleHandler.setFormatter(logFormatter)
+	rootLogger.addHandler(consoleHandler)
+
+	# Set the logging level
+	rootLogger.setLevel(logging.INFO)
+
 # Main function
 if __name__ == "__main__":
+	# Set up logging
+	loggingSetup(fileName="music_bot_log.log")
+
+	# Load config file
 	loadConfiguration(configurationFilePath)
+	logging.info("Configuration Loaded")
 
 	client_key_path = "./client.key"
 	client_key = loadKey(client_key_path)
 	client_key.strip()
+	logging.info("Client Key Loaded")
 
 	# Load OPUS library for voice
 	opusLib = "libopus-0"
-	discord.opus.load_opus(opusLib)
+	try:
+		discord.opus.load_opus(opusLib)
+	except:
+		logging.error("Error loading opusLib: " + sys.exc_info()[0])
+	logging.info("Opus loaded")
+
 	client.run(client_key)
