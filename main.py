@@ -12,6 +12,8 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
+from contextlib import suppress
+
 
 # Queue of songs to play
 class SongPlayer:
@@ -19,7 +21,17 @@ class SongPlayer:
 		self.songList = []
 		self.voiceClient = None
 		self.currentPlayer = None
-		self.volume = 1.0
+		self.volume = 0.5
+
+	# Pause the current song
+	def pause(self):
+		if self.isSongPlaying():
+			self.currentPlayer.pause()
+
+	# Resume the current song
+	def resume(self):
+		if self.currentPlayer != None:
+			self.currentPlayer.resume()
 	
 	# Update the volume of the voice player
 	def updateVolume(self, volume):
@@ -88,7 +100,7 @@ class SongPlayer:
 			return false
 
 		# Is the player playing a song
-			return self.currentPlayer.is_playing()
+		return self.currentPlayer.is_playing()
 
 	# Remove a song off the top of the list
 	def popSong(self):
@@ -142,6 +154,14 @@ class SongPlayer:
 
 		self.currentPlayer.start()
 
+	# Called if an exception happens
+	def exception(self):
+		# No player
+		if self.currentPlayer == None:
+			return
+
+		self.currentPlayer = None
+		self.playNextSong()
 
 # Class for interacting with youtube
 class Youtube:
@@ -276,11 +296,13 @@ async def on_message(message):
 	elif command == "!help":
 		help_message = """
 		Commands:
-		!play [SONG NAME] - Play the song (searches YouTube).  Adds the song to a queue if a song is already playing
+		!play [SONG NAME] - Play the song (searches YouTube).
 		!skip - Skips the current song and starts playing the next.
 		!join [CHANNEL NAME] - Move the bot to the voice channel (case sensitive)
 		!volume [volume] - Set the music volume (Number between 0.0 - 2.0)
 		!volume - Show the current music volume
+		!pause - Pause the current song
+		!resume - Resume the current song
 		!help - Gives a list of commands
 		"""
 		await client.send_message(message.channel, help_message)
@@ -317,6 +339,14 @@ async def on_message(message):
 		# Update the volume
 		songPlayer.updateVolume(volumeFloat)
 
+	# Pause the current song
+	elif command == "!pause":
+		songPlayer.pause()
+
+	# Resume the current song
+	elif command == "!resume":
+		songPlayer.resume()
+
 	elif command.startswith("!"):
 		help_message = """
 		Type !help for a list of commands
@@ -350,10 +380,6 @@ def loggingSetup(fileName):
 	rotatingFileHandler.setFormatter(logFormatter)
 	rootLogger.addHandler(rotatingFileHandler)
 
-#	fileHandler = logging.FileHandler("{0}/{1}.log".format(logPath, fileName))
-#	fileHandler.setFormatter(logFormatter)
-#	rootLogger.addHandler(fileHandler)
-
 	# Log to console
 	consoleHandler = logging.StreamHandler()
 	consoleHandler.setFormatter(logFormatter)
@@ -361,6 +387,13 @@ def loggingSetup(fileName):
 
 	# Set the logging level
 	rootLogger.setLevel(logging.INFO)
+
+# Exception handler for the event loop
+def exceptiionHandler(loop, context):
+	typ, val, trace = sys.exc_info()
+	logging.error("Handling Exception")
+	logging.error(val)
+	logging.error(context)
 
 # Main function
 if __name__ == "__main__":
@@ -383,5 +416,9 @@ if __name__ == "__main__":
 	except:
 		logging.error("Error loading opusLib: " + sys.exc_info()[0])
 	logging.info("Opus loaded")
+
+	# Get the event loop and add exception handler
+	loop = asyncio.get_event_loop()
+	loop.set_exception_handler(exceptiionHandler)
 
 	client.run(client_key)
