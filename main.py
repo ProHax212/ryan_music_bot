@@ -10,6 +10,7 @@ import json
 import os.path
 import sys
 import logging
+import time
 from logging.handlers import RotatingFileHandler
 
 from contextlib import suppress
@@ -22,6 +23,22 @@ class SongPlayer:
 		self.voiceClient = None
 		self.currentPlayer = None
 		self.volume = 0.5
+		self.currentSongFile = ""
+
+	# Get the error that stopped the player
+	def getPlayerError(self):
+		if self.currentPlayer == None:
+			return "No Error"
+		
+		if self.currentPlayer.error == None:
+			return "No Error"
+
+		return self.currentPlayer.error
+
+	# Stop the player from streaming the song
+	def stopPlayer(self):
+		if self.currentPlayer != None:
+			self.currentPlayer.stop()
 
 	# Pause the current song
 	def pause(self):
@@ -55,7 +72,7 @@ class SongPlayer:
 
 		# There is no song playing
 		if not self.currentPlayer.is_playing():
-			pass
+			return
 
 		# Skip the current song
 		self.currentPlayer.stop()
@@ -128,6 +145,7 @@ class SongPlayer:
 
 		# List is empty
 		if len(self.songList) == 0:
+			print("Empty list")
 			return
 
 		# Get the next song Url
@@ -139,19 +157,26 @@ class SongPlayer:
 		songFileName = "songfile"
 		songFilePath = "./" + songFileName + "." + bestaudio.extension
 
+		# Update current songFile
+		songPlayer.currentSongFile = songFilePath
+
 		# Delete file if already exists
 		if os.path.isfile(songFilePath):
+			print("Deleting file")
 			os.remove(songFilePath)
 
 		# Download the file
+		print("Downloading file")
 		bestaudio.download(songFilePath)
 
 		# Play the song
+		logging.info("Creating ffmpeg player")
 		self.currentPlayer = self.voiceClient.create_ffmpeg_player(songFilePath, after=songFinished)
 		
 		# Set the volume
 		self.currentPlayer.volume = self.volume
 
+		logging.info("Starting player")
 		self.currentPlayer.start()
 
 	# Called if an exception happens
@@ -229,6 +254,7 @@ configurationFilePath = "./res/configuration.json"
 configuration = {}
 
 songPlayer = SongPlayer()
+
 
 @client.event
 async def on_ready():
@@ -347,6 +373,10 @@ async def on_message(message):
 	elif command == "!resume":
 		songPlayer.resume()
 
+	# Restart the client
+	elif command == "!restart":
+		await restartClient()
+
 	elif command.startswith("!"):
 		help_message = """
 		Type !help for a list of commands
@@ -389,11 +419,40 @@ def loggingSetup(fileName):
 	rootLogger.setLevel(logging.INFO)
 
 # Exception handler for the event loop
-def exceptiionHandler(loop, context):
+def exceptionHandler(loop, context):
 	typ, val, trace = sys.exc_info()
 	logging.error("Handling Exception")
 	logging.error(val)
 	logging.error(context)
+
+	# Skip the song that broke
+	songPlayer.skipSong()
+
+# Restart the discord client
+async def restartClient():
+	logging.info("Restarting Client")
+
+	# Stop the player if it's playing
+	songPlayer.stopPlayer()
+	songPlayer.skipSong()
+	return
+	
+	# Stop all tasks
+	loop = client.loop
+	for task in asyncio.Task.all_tasks(loop=loop):
+		if task == asyncio.Task.current_task(loop=loop):
+			continue
+		try:
+			task.cancel()
+		except asyncio.CancelledError:
+			logging.error("CancelledError")
+	
+	logging.info("Waiting for cancelled tasks to finish")
+	time.sleep(1)
+	await asyncio.sleep(5.0)
+	logging.info("Finished waiting for cancelled tasks to finish")
+
+	songPlayer.playNextSong()
 
 # Main function
 if __name__ == "__main__":
@@ -419,6 +478,12 @@ if __name__ == "__main__":
 
 	# Get the event loop and add exception handler
 	loop = asyncio.get_event_loop()
-	loop.set_exception_handler(exceptiionHandler)
+	loop.set_exception_handler(exceptionHandler)
 
-	client.run(client_key)
+	# Start the application
+	try:
+		loop.run_until_complete(client.start(client_key))
+	except KeyboardInterrupt:
+		loop.run_until_complete(client.logout())
+	finally:
+		loop.close()
