@@ -24,6 +24,7 @@ class SongPlayer:
 		self.currentPlayer = None
 		self.volume = 0.5
 		self.currentSongFile = ""
+		self.exception = None
 
 	# Get the error that stopped the player
 	def getPlayerError(self):
@@ -43,11 +44,13 @@ class SongPlayer:
 	# Pause the current song
 	def pause(self):
 		if self.isSongPlaying():
+			logging.info("Pausing player")
 			self.currentPlayer.pause()
 
 	# Resume the current song
 	def resume(self):
 		if self.currentPlayer != None:
+			logging.info("Resuming player")
 			self.currentPlayer.resume()
 	
 	# Update the volume of the voice player
@@ -61,11 +64,10 @@ class SongPlayer:
 	# Add a song to the song list
 	def addSong(self, songName):
 		self.songList.append(songName)
-		print("SONGS:")
-		print(self.songList)
+		logging.info("Added song")
 
 	# Skip the current song
-	def skipSong(self):
+	async def skipSong(self):
 		# There is no currentPlayer
 		if self.currentPlayer == None:
 			return
@@ -93,10 +95,10 @@ class SongPlayer:
 			else:
 				await self.voiceClient.move_to(channel)
 		except discord.InvalidArgument:
-			print("Channel was not a voice channel")
+			logging.warning("Channel was not a voice channel")
 			return
 		except (discord.ClientException):
-			print("You're already connected to a voice channel")			
+			logging.warning("You're already connected to a voice channel")			
 			return
 
 	def canPlaySong(self):
@@ -140,12 +142,12 @@ class SongPlayer:
 	def playNextSong(self):
 		# Can the voice client play the song
 		if not self.canPlaySong():
-			print("Voice client can't play the song")
+			logging.info("Voice client can't play the song")
 			return
 
 		# List is empty
 		if len(self.songList) == 0:
-			print("Empty list")
+			logging.info("Can't play song, the list is empty")
 			return
 
 		# Get the next song Url
@@ -162,30 +164,39 @@ class SongPlayer:
 
 		# Delete file if already exists
 		if os.path.isfile(songFilePath):
-			print("Deleting file")
+			logging.info("Deleting file")
 			os.remove(songFilePath)
 
 		# Download the file
-		print("Downloading file")
+		logging.info("Downloading file")
 		bestaudio.download(songFilePath)
 
 		# Play the song
 		logging.info("Creating ffmpeg player")
-		self.currentPlayer = self.voiceClient.create_ffmpeg_player(songFilePath, after=songFinished)
+		ffmpeg_error_log = open('./ffmpeg-log.txt', 'w')
+		self.currentPlayer = self.voiceClient.create_ffmpeg_player(songFilePath, after=songFinished, stderr=ffmpeg_error_log)
 		
 		# Set the volume
 		self.currentPlayer.volume = self.volume
 
 		logging.info("Starting player")
 		self.currentPlayer.start()
+		ffmpeg_error_log.close()
 
 	# Called if an exception happens
-	def exception(self):
+	async def exception(self):
 		# No player
 		if self.currentPlayer == None:
 			return
 
-		self.currentPlayer = None
+		# Stop the player
+		self.stopPlayer()
+
+		# Reconnect voice
+		channel = self.voiceClient.channel
+		await self.voiceClient.disconnect()
+		self.voiceClient = await client.join_voice_channel(channel)
+
 		self.playNextSong()
 
 # Class for interacting with youtube
@@ -236,7 +247,7 @@ class Youtube:
 
 		# There are no results
 		if returnUrl == "":
-			print("There were no Youtube results")
+			logging.info("There were no Youtube results")
 			return ""
 
 		# Return the URL for the video
@@ -244,7 +255,9 @@ class Youtube:
 
 # Callback for when a song is done
 def songFinished():
-	songPlayer.playNextSong()
+	# Check exception
+	if songPlayer.exception == None:
+		songPlayer.playNextSong()
 
 # Globals
 client = discord.Client()
@@ -262,6 +275,7 @@ async def on_ready():
 	print(client.user.name)
 	print(client.user.id)
 	print('----------')
+	logging.info("Client is ready")
 
 # Error handler for the discord client
 @client.event
@@ -335,7 +349,7 @@ async def on_message(message):
 
 	# Skip the current song
 	elif command == "!skip":
-		songPlayer.skipSong()	
+		await songPlayer.skipSong()	
 
 	# Set the volume for the bot
 	elif command == "!volume":
@@ -420,13 +434,11 @@ def loggingSetup(fileName):
 
 # Exception handler for the event loop
 def exceptionHandler(loop, context):
+	songPlayer.exception = Exception('Error playing song')
 	typ, val, trace = sys.exc_info()
 	logging.error("Handling Exception")
 	logging.error(val)
 	logging.error(context)
-
-	# Skip the song that broke
-	songPlayer.skipSong()
 
 # Restart the discord client
 async def restartClient():
@@ -434,25 +446,20 @@ async def restartClient():
 
 	# Stop the player if it's playing
 	songPlayer.stopPlayer()
-	songPlayer.skipSong()
-	return
-	
-	# Stop all tasks
-	loop = client.loop
-	for task in asyncio.Task.all_tasks(loop=loop):
-		if task == asyncio.Task.current_task(loop=loop):
-			continue
-		try:
-			task.cancel()
-		except asyncio.CancelledError:
-			logging.error("CancelledError")
-	
-	logging.info("Waiting for cancelled tasks to finish")
-	time.sleep(1)
-	await asyncio.sleep(5.0)
-	logging.info("Finished waiting for cancelled tasks to finish")
 
+	# Reconnect voice connection
+	channel = songPlayer.voiceClient.channel
+	await songPlayer.voiceClient.disconnect()
+	await asyncio.sleep(0.5)
+	songPlayer.voiceClient = await client.join_voice_channel(channel)
+
+	# Clear the exception
+	songPlayer.exception = None
+
+	# Go to next song
 	songPlayer.playNextSong()
+
+	return
 
 # Main function
 if __name__ == "__main__":
