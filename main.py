@@ -173,7 +173,7 @@ class SongPlayer:
 
 		# Play the song
 		logging.info("Creating ffmpeg player")
-		ffmpeg_error_log = open('./ffmpeg-log.txt', 'w')
+		ffmpeg_error_log = open('./ffmpeg-log.log', 'w')
 		self.currentPlayer = self.voiceClient.create_ffmpeg_player(songFilePath, after=songFinished, stderr=ffmpeg_error_log)
 		
 		# Set the volume
@@ -344,6 +344,7 @@ async def on_message(message):
 		!pause - Pause the current song
 		!resume - Resume the current song
 		!help - Gives a list of commands
+		!restart - Restarts the music bot (leave and join channel)
 		"""
 		await client.send_message(message.channel, help_message)
 
@@ -459,7 +460,13 @@ async def restartClient():
 	# Go to next song
 	songPlayer.playNextSong()
 
-	return
+# Periodically check for an exception
+# If there is an exception, reset the voice client
+async def exceptionCheck():
+	while True:
+		if songPlayer.exception != None:
+			await restartClient()
+		await asyncio.sleep(5)
 
 # Main function
 if __name__ == "__main__":
@@ -489,7 +496,10 @@ if __name__ == "__main__":
 
 	# Start the application
 	try:
-		loop.run_until_complete(client.start(client_key))
+		loop.run_until_complete(asyncio.gather(
+			exceptionCheck(),
+			client.start(client_key),
+		))
 	except KeyboardInterrupt:
 		loop.run_until_complete(client.logout())
 	finally:
