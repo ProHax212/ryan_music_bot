@@ -390,7 +390,7 @@ async def on_message(message):
 
 	# Restart the client
 	elif command == "!restart":
-		await restartClient()
+		restartClient()
 
 	elif command.startswith("!"):
 		help_message = """
@@ -435,7 +435,9 @@ def loggingSetup(fileName):
 
 # Exception handler for the event loop
 def exceptionHandler(loop, context):
+	# Flag that an exception happened
 	songPlayer.exception = Exception('Error playing song')
+
 	typ, val, trace = sys.exc_info()
 	logging.error("Handling Exception")
 	logging.error(val)
@@ -462,11 +464,11 @@ async def restartClient():
 
 # Periodically check for an exception
 # If there is an exception, reset the voice client
-async def exceptionCheck():
+async def exceptionCheck(delay):
 	while True:
 		if songPlayer.exception != None:
 			await restartClient()
-		await asyncio.sleep(5)
+		await asyncio.sleep(delay)
 
 # Main function
 if __name__ == "__main__":
@@ -497,7 +499,7 @@ if __name__ == "__main__":
 	# Start the application
 	try:
 		loop.run_until_complete(asyncio.gather(
-			exceptionCheck(),
+			exceptionCheck(5),
 			client.start(client_key),
 		))
 	except KeyboardInterrupt:
