@@ -15,6 +15,8 @@ from logging.handlers import RotatingFileHandler
 
 from contextlib import suppress
 
+import random
+
 
 # Queue of songs to play
 class SongPlayer:
@@ -391,6 +393,25 @@ async def on_message(message):
 	# Restart the client
 	elif command == "!restart":
 		restartClient()
+
+	# Random Number
+	elif command == "!roll":
+		logging.info("Generating random number")
+		number = content.partition(' ')[2]
+
+		# Bad volume syntax
+		numberInt = 0
+		try:
+			numberInt = int(number)
+		except ValueError:
+			botMessage = "Number must be an integer"
+			await client.send_message(message.channel, botMessage)
+			return
+
+		randomNumber = random.randint(0, numberInt)
+		author = message.author.name
+		botMessage = str(author + ": " + str(randomNumber))
+		await client.send_message(message.channel, botMessage)
 
 	elif command.startswith("!"):
 		help_message = """
