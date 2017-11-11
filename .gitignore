@@ -4,3 +4,6 @@
 *.m4a
 *.log
 *.temp
+*.dll
+*.exe
+*.a
