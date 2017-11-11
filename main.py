@@ -485,7 +485,7 @@ if __name__ == "__main__":
 	logging.info("Client Key Loaded")
 
 	# Load OPUS library for voice
-	opusLib = "libopus-0"
+	opusLib = "/usr/lib/arm-linux-gnueabihf/libopus.so.0.5.3"
 	try:
 		discord.opus.load_opus(opusLib)
 	except:
